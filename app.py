@@ -213,7 +213,7 @@ html, body, [class*="css"] {
     background-color: #0D1117;
     color: #E2E8F0;
 }
-.block-container { padding: 1.6rem 2rem 3rem; max-width: 1400px; }
+.block-container { padding: 4.5rem 2rem 3rem; max-width: 1400px; }
 .stApp { background: #0D1117; }
 
 /* ── Sidebar ── */
@@ -382,10 +382,11 @@ h1, h2, h3 { font-family: 'DM Sans', sans-serif; font-weight: 600; }
 .fml b { color: var(--amber); }
 
 /* ── Hide streamlit chrome ── */
-/* NOTE: Do NOT hide `header` — it contains the sidebar toggle button */
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 .stDeployButton { display: none; }
+div[data-testid="stToolbar"] { visibility: visible !important; display: flex !important; }
+header[data-testid="stHeader"] { background: transparent !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -401,6 +402,8 @@ with st.sidebar:
 <div style="border-bottom:1px solid #1E2D3D;margin-bottom:16px;"></div>
 """, unsafe_allow_html=True)
 
+    run = st.button("RUN OPTIMIZER", use_container_width=True, type="primary")
+    st.markdown('<div style="border-bottom:1px solid #1E2D3D;margin:10px 0 14px;"></div>', unsafe_allow_html=True)
     st.markdown('<div style="font-family:\'IBM Plex Mono\',monospace;font-size:.65rem;color:#F59E0B;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">LINE PARAMETERS</div>', unsafe_allow_html=True)
     daily_dem = st.number_input("Daily unit target", 100, 2000, 800, 50)
     ramp_pct  = st.slider("Production ramp (%)", 0, 80, 0, 5,
@@ -430,9 +433,7 @@ with st.sidebar:
     WTYPES["Part-Time"]["hourly"]  = w_pt
     WTYPES["Contractor"]["hourly"] = w_ct
 
-    st.markdown('<div style="border-bottom:1px solid #1E2D3D;margin:12px 0;"></div>', unsafe_allow_html=True)
-    run = st.button("RUN OPTIMIZER", use_container_width=True, type="primary")
-    st.markdown('<div style="font-size:.62rem;color:#334155;font-family:\'IBM Plex Mono\',monospace;text-align:center;margin-top:8px;">HiGHS · 18 MILP sub-problems</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:.62rem;color:#334155;font-family:\'IBM Plex Mono\',monospace;text-align:center;margin-top:12px;">HiGHS · 18 MILP sub-problems</div>', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HEADER
