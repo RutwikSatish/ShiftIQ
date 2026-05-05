@@ -766,25 +766,20 @@ if run or "res" in st.session_state:
                    for s in STATIONS for sh in SHIFT_MULT if sols[s][sh]["ok"]]
         df_hc = pd.DataFrame(hc_rows)
         chart_hc = (
-            alt.Chart(df_hc).mark_bar(cornerRadiusTopLeft=2,cornerRadiusTopRight=2)
+            alt.Chart(df_hc).mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
             .encode(
-                x=alt.X("Shift:N",title=None,sort=["Day","Evening","Night"],
-                         axis=alt.Axis(labelAngle=0,labelColor="#64748B",labelFont="IBM Plex Mono",
-                                       labelFontSize=10,gridColor="#1E2D3D",domainColor="#1E2D3D")),
-                y=alt.Y("Headcount:Q",title="Workers",
-                         axis=alt.Axis(labelColor="#64748B",titleColor="#64748B",
-                                       labelFont="IBM Plex Mono",gridColor="#1E2D3D",domainColor="#1E2D3D")),
-                color=alt.Color("Shift:N",scale=alt.Scale(
-                    domain=["Day","Evening","Night"],range=["#F59E0B","#78716C","#292524"]),
-                    legend=alt.Legend(labelColor="#94A3B8",titleColor="#94A3B8",
-                                      labelFont="IBM Plex Mono",labelFontSize=10)),
-                column=alt.Column("Station:N",title=None,
-                    header=alt.Header(labelAngle=-30,labelAlign="right",labelColor="#94A3B8",
-                                      labelFont="IBM Plex Mono",labelFontSize=10)),
+                x=alt.X("Shift:N", title=None, sort=["Day","Evening","Night"],
+                         axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("Headcount:Q", title="Workers"),
+                color=alt.Color("Shift:N",
+                    scale=alt.Scale(domain=["Day","Evening","Night"],
+                                    range=["#F59E0B","#78716C","#44403C"]),
+                    legend=alt.Legend(title="Shift")),
+                column=alt.Column("Station:N", title=None,
+                    header=alt.Header(labelAngle=-30, labelAlign="right")),
                 tooltip=["Station","Shift","Headcount"],
             )
-            .properties(width=95,height=200,background="#0D1117")
-            .configure_view(strokeColor="#1E2D3D")
+            .properties(width=95, height=200)
         )
         st.altair_chart(chart_hc,use_container_width=False)
 
@@ -799,21 +794,17 @@ if run or "res" in st.session_state:
         chart_cost=(
             alt.Chart(df_cost).mark_bar()
             .encode(
-                x=alt.X("Station:N",sort=list(STATIONS.keys()),title=None,
-                         axis=alt.Axis(labelAngle=-25,labelColor="#64748B",labelFont="IBM Plex Mono",
-                                       gridColor="#1E2D3D",domainColor="#1E2D3D")),
-                y=alt.Y("Cost ($):Q",title="Weekly Cost ($)",
-                         axis=alt.Axis(labelColor="#64748B",titleColor="#64748B",
-                                       labelFont="IBM Plex Mono",gridColor="#1E2D3D",domainColor="#1E2D3D")),
-                color=alt.Color("Shift:N",scale=alt.Scale(
-                    domain=["Day","Evening","Night"],range=["#F59E0B","#92400E","#1C1917"]),
-                    legend=alt.Legend(labelColor="#94A3B8",titleColor="#94A3B8",
-                                      labelFont="IBM Plex Mono",labelFontSize=10)),
-                order=alt.Order("Shift:N",sort="ascending"),
+                x=alt.X("Station:N", sort=list(STATIONS.keys()), title=None,
+                         axis=alt.Axis(labelAngle=-25)),
+                y=alt.Y("Cost ($):Q", title="Weekly Cost ($)"),
+                color=alt.Color("Shift:N",
+                    scale=alt.Scale(domain=["Day","Evening","Night"],
+                                    range=["#F59E0B","#92400E","#44403C"]),
+                    legend=alt.Legend(title="Shift")),
+                order=alt.Order("Shift:N", sort="ascending"),
                 tooltip=["Station","Shift","Cost ($)"],
             )
-            .properties(height=280,background="#0D1117")
-            .configure_view(strokeColor="#1E2D3D")
+            .properties(height=280)
         )
         st.altair_chart(chart_cost,use_container_width=True)
 
@@ -832,29 +823,27 @@ if run or "res" in st.session_state:
                                    "Coverage":int(sols[s]["Day"]["coverage"][j])})
         df_heat=pd.DataFrame(heat_rows)
         base_heat=(
-            alt.Chart(df_heat).mark_rect(stroke="#0D1117",strokeWidth=2)
+            alt.Chart(df_heat).mark_rect(stroke="white", strokeWidth=1)
             .encode(
-                x=alt.X("Day:N",sort=DAYS,title=None,
-                         axis=alt.Axis(labelColor="#64748B",labelFont="IBM Plex Mono",domainColor="#1E2D3D")),
-                y=alt.Y("Station:N",sort=list(STATIONS.keys()),title=None,
-                         axis=alt.Axis(labelColor="#64748B",labelFont="IBM Plex Mono",domainColor="#1E2D3D")),
-                color=alt.Color("Surplus:Q",scale=alt.Scale(
-                    domain=[0,5],range=["#1C2632","#F59E0B"]),
-                    legend=alt.Legend(labelColor="#94A3B8",titleColor="#94A3B8",
-                                      labelFont="IBM Plex Mono",title="Surplus")),
+                x=alt.X("Day:N", sort=DAYS, title=None),
+                y=alt.Y("Station:N", sort=list(STATIONS.keys()), title=None),
+                color=alt.Color("Surplus:Q",
+                    scale=alt.Scale(domain=[0,5], range=["#1C2632","#F59E0B"]),
+                    legend=alt.Legend(title="Surplus")),
                 tooltip=["Station","Day","Demand","Coverage","Surplus"],
-            ).properties(height=220,background="#0D1117")
+            ).properties(height=220)
         )
         text_heat=(
-            alt.Chart(df_heat).mark_text(fontSize=11,fontWeight="bold",font="IBM Plex Mono")
+            alt.Chart(df_heat).mark_text(fontSize=11, fontWeight="bold")
             .encode(
-                x=alt.X("Day:N",sort=DAYS),
-                y=alt.Y("Station:N",sort=list(STATIONS.keys())),
+                x=alt.X("Day:N", sort=DAYS),
+                y=alt.Y("Station:N", sort=list(STATIONS.keys())),
                 text=alt.Text("Surplus:Q"),
-                color=alt.condition(alt.datum.Surplus>2,alt.value("#0D1117"),alt.value("#F1F5F9")),
+                color=alt.condition(alt.datum.Surplus > 2,
+                    alt.value("white"), alt.value("#0f172a")),
             )
         )
-        st.altair_chart((base_heat+text_heat).configure_view(strokeColor="#1E2D3D"),
+        st.altair_chart((base_heat+text_heat),
                         use_container_width=True)
         st.caption("Zero cells have no buffer — one absent worker drops below demand on that day.")
 
@@ -879,23 +868,19 @@ if run or "res" in st.session_state:
                     if r2.status==0: tot+=int(np.round(r2.x).sum())
             ramp_rows.append({"Ramp %":rp,"Headcount":tot,"Weekly Cost ($)":round(tot*shift_cost("Full-Time"),0)})
         df_ramp=pd.DataFrame(ramp_rows)
-        base_r=alt.Chart(df_ramp).encode(x=alt.X("Ramp %:Q",title="Production Ramp (%)",
-            axis=alt.Axis(labelColor="#64748B",titleColor="#64748B",labelFont="IBM Plex Mono",
-                          gridColor="#1E2D3D",domainColor="#1E2D3D")))
-        line_hc_r=base_r.mark_line(point=True,color="#F59E0B",strokeWidth=2).encode(
-            y=alt.Y("Headcount:Q",title="Min Headcount",
-                    axis=alt.Axis(titleColor="#F59E0B",labelColor="#64748B",
-                                  labelFont="IBM Plex Mono",gridColor="#1E2D3D",domainColor="#1E2D3D")),
+        base_r = alt.Chart(df_ramp).encode(
+            x=alt.X("Ramp %:Q", title="Production Ramp (%)")
+        )
+        line_hc_r = base_r.mark_line(point=True, color="#F59E0B", strokeWidth=2).encode(
+            y=alt.Y("Headcount:Q", title="Min Headcount"),
             tooltip=["Ramp %","Headcount"])
-        line_cost_r=base_r.mark_line(point=True,color="#34D399",strokeWidth=2,strokeDash=[4,2]).encode(
-            y=alt.Y("Weekly Cost ($):Q",title="Weekly Cost ($)",
-                    axis=alt.Axis(titleColor="#34D399",labelColor="#64748B",
-                                  labelFont="IBM Plex Mono",gridColor="#1E2D3D",domainColor="#1E2D3D")),
+        line_cost_r = base_r.mark_line(point=True, color="#34D399", strokeWidth=2,
+                                        strokeDash=[4,2]).encode(
+            y=alt.Y("Weekly Cost ($):Q", title="Weekly Cost ($)"),
             tooltip=["Ramp %","Weekly Cost ($)"])
         st.altair_chart(
             alt.layer(line_hc_r,line_cost_r).resolve_scale(y="independent")
-            .properties(height=280,background="#0D1117")
-            .configure_view(strokeColor="#1E2D3D"),
+            .properties(height=280,background="#0D1117"),
             use_container_width=True)
         st.caption("Amber solid = headcount (left axis) · Green dashed = weekly cost (right axis)")
 
@@ -913,23 +898,18 @@ if run or "res" in st.session_state:
                 mix_s.append({"FT%":_ft,"CT%":_ct,"PT%":_pt,"Weekly Cost ($)":round(_c,0),"Mix":f"FT{_ft} PT{_pt} CT{_ct}"})
         df_mix=pd.DataFrame(mix_s)
         chart_mix=(
-            alt.Chart(df_mix).mark_bar(cornerRadiusTopLeft=2,cornerRadiusTopRight=2)
+            alt.Chart(df_mix).mark_bar(cornerRadiusTopLeft=2, cornerRadiusTopRight=2)
             .encode(
-                x=alt.X("Mix:N",title=None,
-                         sort=alt.EncodingSortField("Weekly Cost ($)",order="ascending"),
-                         axis=alt.Axis(labelAngle=-35,labelColor="#64748B",labelFont="IBM Plex Mono",
-                                       gridColor="#1E2D3D",domainColor="#1E2D3D")),
-                y=alt.Y("Weekly Cost ($):Q",title="Weekly Cost ($)",
-                         axis=alt.Axis(labelColor="#64748B",titleColor="#64748B",
-                                       labelFont="IBM Plex Mono",gridColor="#1E2D3D",domainColor="#1E2D3D")),
-                color=alt.Color("CT%:O",scale=alt.Scale(
-                    domain=[0,10,20],range=["#F59E0B","#B45309","#78350F"]),
-                    legend=alt.Legend(title="CT%",labelColor="#94A3B8",titleColor="#94A3B8",
-                                      labelFont="IBM Plex Mono")),
+                x=alt.X("Mix:N", title=None,
+                         sort=alt.EncodingSortField("Weekly Cost ($)", order="ascending"),
+                         axis=alt.Axis(labelAngle=-35)),
+                y=alt.Y("Weekly Cost ($):Q", title="Weekly Cost ($)"),
+                color=alt.Color("CT%:O",
+                    scale=alt.Scale(domain=[0,10,20], range=["#F59E0B","#B45309","#78350F"]),
+                    legend=alt.Legend(title="CT%")),
                 tooltip=["FT%","PT%","CT%","Weekly Cost ($)"],
             )
-            .properties(height=260,background="#0D1117")
-            .configure_view(strokeColor="#1E2D3D")
+            .properties(height=260)
         )
         st.altair_chart(chart_mix,use_container_width=True)
         st.caption("Contractors cost ~83% more per shift loaded ($419 vs $229). Amber = no contractors, brown = 20% contractor share.")
