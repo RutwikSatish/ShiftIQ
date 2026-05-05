@@ -7,7 +7,7 @@ Run locally:
     streamlit run shiftiq.py
 
 Deploy (Hugging Face Spaces — free, no sleep after pushes):
-    1. Create a Space at Hugging Face.co/spaces  (SDK: Streamlit)
+    1. Create a Space at huggingface.co/spaces  (SDK: Streamlit)
     2. Push this file as app.py + requirements.txt
     3. HF Spaces stay awake as long as the Space is public and pinned
 """
@@ -18,6 +18,110 @@ import pandas as pd
 import streamlit as st
 from scipy.optimize import milp, LinearConstraint, Bounds
 from datetime import datetime
+
+# ── Groq helper ───────────────────────────────────────────────────────────────
+def groq_summary(prompt: str, api_key: str) -> str:
+    """
+    Call Groq API (llama-3.3-70b-versatile) with a structured prompt.
+    Key stored in st.secrets["GROQ_API_KEY"] — never in code.
+    Groq endpoint: https://api.groq.com/openai/v1/chat/completions
+    """
+    import urllib.request
+    payload = json.dumps({
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3,
+        "max_tokens": 900,
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        data = json.loads(resp.read())
+    return data["choices"][0]["message"]["content"].strip()
+
+
+def build_summary_prompt(sols, p, tk_, adj, ft_wkcost, mix_cost, oev, total_hc, all_ok):
+    """
+    Build a tightly scoped, number-grounded prompt so the model
+    summarises what the MILP actually found — not generic IE advice.
+    """
+    # Identify tightest and loosest station-shift by TOTAL weekly surplus
+    # (sum over 7 days) — gives meaningful differentiation when min surplus is 0 everywhere
+    tightest = min(
+        ((s, sh) for s in STATIONS for sh in SHIFT_MULT if sols[s][sh]["ok"]),
+        key=lambda x: int(sols[x[0]][x[1]]["surplus"].sum())
+    )
+    loosest = max(
+        ((s, sh) for s in STATIONS for sh in SHIFT_MULT if sols[s][sh]["ok"]),
+        key=lambda x: int(sols[x[0]][x[1]]["surplus"].sum())
+    )
+    t_total_surplus = int(sols[tightest[0]][tightest[1]]["surplus"].sum())
+    l_total_surplus = int(sols[loosest[0]][loosest[1]]["surplus"].sum())
+
+    # Cost concentration: which station-shift is most expensive
+    costiest = max(
+        ((s, sh) for s in STATIONS for sh in SHIFT_MULT if sols[s][sh]["ok"]),
+        key=lambda x: sols[x[0]][x[1]]["wk_cost"]
+    )
+    costiest_val = sols[costiest[0]][costiest[1]]["wk_cost"]
+    costiest_hc  = sols[costiest[0]][costiest[1]]["hc"]
+
+    # Night-shift total headcount
+    night_hc = sum(sols[s]["Night"]["hc"] for s in STATIONS if sols[s]["Night"]["ok"])
+    day_hc   = sum(sols[s]["Day"]["hc"]   for s in STATIONS if sols[s]["Day"]["ok"])
+
+    prompt = f"""You are an industrial engineering analyst writing a structured debrief for a workforce planner after running a shift scheduling optimisation.
+
+CONTEXT:
+- Model: Dantzig (1954) set-covering MILP, HiGHS solver
+- 6 battery assembly stations × 3 shifts (Day/Evening/Night)
+- 18 independent sub-problems, all feasible and constraint-validated: {all_ok}
+
+SOLVED SCHEDULE — KEY NUMBERS:
+- Takt time: {tk_:.4f} min/unit  (net available {p['shift_dur']*60 - p['brk']} min ÷ {adj} units/day)
+- Total minimum headcount: {total_hc}  (Day: {day_hc}, Night: {night_hc})
+- Weekly cost all-FT: ${ft_wkcost:,.0f}  |  Mixed ({p['ft_pct']}% FT/{p['pt_pct']}% PT/{p['ct_pct']}% CT): ${mix_cost:,.0f}
+- OEE input (ISO 22400-2): {oev*100:.1f}%  (A={p['avail']*100:.0f}% × P={p['perf']*100:.0f}% × Q={p['qual_']*100:.0f}%)
+- Production ramp applied: {p['ramp_pct']}%
+
+COVERAGE ANALYSIS:
+- Tightest station-shift: {tightest[0]} / {tightest[1]}  (total weekly surplus = {t_total_surplus} worker-days — zero means no absenteeism buffer)
+- Loosest station-shift: {loosest[0]} / {loosest[1]}  (total weekly surplus = {l_total_surplus} worker-days — potential for rebalancing)
+- Most expensive station-shift: {costiest[0]} / {costiest[1]}  ({costiest_hc} workers, ${costiest_val:,.0f}/week)
+- Night shift = {night_hc} workers = {night_hc/total_hc*100:.0f}% of total headcount
+
+WORKER MIX COST DELTA:
+- Switching from all-FT to current mix saves/costs: ${mix_cost - ft_wkcost:+,.0f}/week
+
+TASK:
+Write a concise, structured debrief in exactly this format — no extra sections, no generic advice:
+
+**Schedule Summary**
+2–3 sentences on what the optimiser found: total headcount, cost, and whether all demand is covered.
+
+**Coverage Flags**
+- Bullet on the tightest station-shift and what the total weekly surplus of {t_total_surplus} means operationally (zero total surplus = no absenteeism buffer across the whole week)
+- Bullet on the loosest (surplus {l_total_surplus} worker-days — potential rebalancing opportunity)
+
+**Cost Concentration**
+1–2 sentences identifying where weekly cost is concentrated and why (station complexity, shift multiplier, or worker count).
+
+**Night Shift Note**
+1 sentence on whether the night-shift headcount ({night_hc}) looks proportionate relative to day ({day_hc}) and what a planner should verify.
+
+**One Action Item**
+The single most actionable thing a planner should check or change given this specific schedule — based only on the numbers above, not generic IE advice.
+
+Keep it under 280 words. Use exact numbers from the data above. Do not invent numbers."""
+
+    return prompt
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -648,6 +752,67 @@ if run or "res" in st.session_state:
     st.download_button("⬇️  Export JSON", json.dumps(export,indent=2),
                        f"shiftiq_{datetime.now().strftime('%Y%m%d_%H%M')}.json","application/json")
 
+    # ── AI Schedule Debrief ───────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown('<div class="sec">🤖  AI Schedule Debrief</div>', unsafe_allow_html=True)
+    st.markdown(
+        "Generates a structured, number-grounded summary of **this specific run** — "
+        "tightest coverage, cost concentration, night-shift proportionality, and one action item. "
+        "Powered by **Groq · Llama 3.3 70B**. The prompt contains only the actual MILP output numbers — "
+        "the model cannot invent figures."
+    )
+
+    # Key resolution order: st.secrets → env var → text input
+    groq_key = ""
+    try:
+        groq_key = st.secrets["GROQ_API_KEY"]
+    except Exception:
+        pass
+
+    if not groq_key:
+        import os
+        groq_key = os.environ.get("GROQ_API_KEY", "")
+
+    if not groq_key:
+        groq_key = st.text_input(
+            "Groq API key (session only — never stored or logged)",
+            type="password",
+            placeholder="gsk_...",
+            help="Free key at console.groq.com. For deployment, add GROQ_API_KEY to Streamlit secrets.",
+        )
+
+    col_btn, col_note = st.columns([1, 4])
+    with col_btn:
+        gen_btn = st.button("Generate Debrief", type="primary", disabled=not bool(groq_key))
+    with col_note:
+        if not groq_key:
+            st.caption("⚠️  Enter a Groq API key above to enable — free at console.groq.com")
+        else:
+            st.caption("✅  API key ready")
+
+    if gen_btn and groq_key:
+        with st.spinner("Calling Groq (Llama 3.3 70B) …"):
+            try:
+                prompt  = build_summary_prompt(
+                    sols, p, tk_, adj, ft_wkcost, mix_cost, oev, total_hc, all_ok
+                )
+                summary = groq_summary(prompt, groq_key)
+                st.session_state["ai_summary"] = summary
+                st.session_state["ai_prompt"]  = prompt
+            except Exception as e:
+                st.session_state["ai_summary"] = f"❌  API error: {e}"
+                st.session_state["ai_prompt"]  = ""
+
+    if "ai_summary" in st.session_state and st.session_state["ai_summary"]:
+        st.markdown(st.session_state["ai_summary"])
+        with st.expander("🔍  View full prompt sent to model", expanded=False):
+            st.markdown(
+                "Every number in this prompt comes directly from the MILP solver output. "
+                "The model is instructed to use only these figures — no general IE knowledge, no invented numbers."
+            )
+            if st.session_state.get("ai_prompt"):
+                st.code(st.session_state["ai_prompt"], language="text")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PRE-RUN LANDING
 # ─────────────────────────────────────────────────────────────────────────────
@@ -668,104 +833,6 @@ Industrial engineers, IE analysts, and workforce planners who need to explain *h
         st.markdown("""
 **What you can tune**
 Daily unit target, production ramp %, shift length, break time, worker-type mix, wages, and OEE components. Every output traces back to the inputs through a documented formula.
-""")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DEPLOYMENT GUIDE  (always visible)
-# ─────────────────────────────────────────────────────────────────────────────
-with st.expander("🚀  Deployment Guide — free live URL for your portfolio", expanded=False):
-    dg1, dg2, dg3 = st.columns(3)
-
-    with dg1:
-        st.markdown("""
-### 🟢 Best option: Hugging Face Spaces
-**Free · No sleep on public Spaces · No credit card**
-
-HF Spaces is the right choice for a portfolio tool like this. Public Spaces with CPU-basic hardware stay awake as long as they are public — they are not subject to the same 12-hour sleep policy as Streamlit Community Cloud.
-
-**Steps:**
-1. Create account at huggingface.co
-2. New Space → name it `shiftiq` → SDK: **Streamlit**
-3. Upload two files:
-   - `app.py` (this file renamed)
-   - `requirements.txt` (see below)
-4. Your URL: `https://huggingface.co/spaces/<your-username>/shiftiq`
-5. Embed in portfolio with `<iframe src="...hf.space?embed=true">`
-
-**requirements.txt:**
-```
-streamlit
-numpy
-scipy
-pandas
-```
-
-**Limitations:**
-- CPU-basic is slow on cold start (~30s first load)
-- 16 GB RAM limit (far more than needed here)
-- If Space goes unused for 48h it pauses — any visitor wakes it
-""")
-
-    with dg2:
-        st.markdown("""
-### 🟡 Option 2: Streamlit Community Cloud
-**Free · Sleeps after 12h inactivity**
-
-The official Streamlit host — easiest setup but unreliable for always-on.
-
-**Steps:**
-1. Push code to GitHub repo
-2. share.streamlit.io → Deploy from repo
-3. URL: `https://<name>.streamlit.app`
-
-**Sleep workaround (GitHub Actions):**
-Create `.github/workflows/keep_alive.yml`:
-```yaml
-name: Keep Alive
-on:
-  schedule:
-    - cron: '0 */6 * * *'
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
-      - run: curl -s https://<your-app>.streamlit.app
-```
-This pings your app every 6 hours so it never hits the 12h sleep threshold.
-
-**Limitations:**
-- 1 GB RAM on free tier
-- Sleep policy can change at any time
-- Workaround is fragile
-""")
-
-    with dg3:
-        st.markdown("""
-### 🔴 Option 3: Render.com (free tier)
-**Free · Also spins down on inactivity**
-
-Render's free web services spin down after inactivity — same problem as Streamlit Community Cloud but more setup required.
-
-**Use Render if you want a custom domain** or plan to upgrade to $7/month for always-on.
-
-**Steps:**
-1. Create `render.yaml` in repo root
-2. Connect GitHub at render.com → New Web Service
-3. Build: `pip install -r requirements.txt`
-4. Start: `streamlit run shiftiq.py --server.port $PORT`
-
----
-
-### Honest recommendation
-
-| Platform | Always-on free? | Setup effort | Portfolio URL |
-|---|---|---|---|
-| HF Spaces | ✅ Yes (public) | Low | ✅ Clean URL |
-| Streamlit Cloud | ❌ (12h sleep) | Very low | ✅ Clean URL |
-| Render free | ❌ (spins down) | Medium | ✅ Custom domain |
-| Render $7/mo | ✅ Yes | Medium | ✅ Always on |
-
-**Verdict: use HF Spaces.** It's the only genuinely free, always-on option for a Python/Streamlit app you want recruiters to visit without a loading screen.
 """)
 
 # ─────────────────────────────────────────────────────────────────────────────
