@@ -382,9 +382,10 @@ h1, h2, h3 { font-family: 'DM Sans', sans-serif; font-weight: 600; }
 .fml b { color: var(--amber); }
 
 /* ── Hide streamlit chrome ── */
-#MainMenu, footer, header { visibility: hidden; }
+/* NOTE: Do NOT hide `header` — it contains the sidebar toggle button */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
 .stDeployButton { display: none; }
-div[data-testid="stToolbar"] { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
