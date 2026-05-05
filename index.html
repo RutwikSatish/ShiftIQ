@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShiftIQ — Workforce Shift Scheduling Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #080C11;
+  --bg1:     #0D1117;
+  --bg2:     #141B24;
+  --bg3:     #1A2332;
+  --border:  #1E2D3D;
+  --amber:   #F59E0B;
+  --amber2:  #FBBF24;
+  --green:   #34D399;
+  --text:    #E2E8F0;
+  --muted:   #64748B;
+  --soft:    #94A3B8;
+  --mono:    'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── Grid noise texture overlay ─────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(245,158,11,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245,158,11,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Shared ─────────────────────────────────────────────────────────────── */
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
+
+.amber  { color: var(--amber); }
+.green  { color: var(--green); }
+.muted  { color: var(--muted); }
+.soft   { color: var(--soft); }
+
+.label {
+  font-size: .62rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--amber); font-weight: 600;
+}
+
+/* ── NAV ────────────────────────────────────────────────────────────────── */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,12,17,.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: .75rem 0;
+}
+.nav-inner {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: .6rem;
+}
+.nav-icon {
+  width: 28px; height: 28px; background: var(--amber); border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .9rem;
+}
+.nav-name {
+  font-family: var(--display); font-size: 1rem; font-weight: 700;
+  color: var(--text); letter-spacing: -.01em;
+}
+.nav-links { display: flex; gap: 1.5rem; }
+.nav-links a {
+  font-size: .70rem; color: var(--muted); text-decoration: none;
+  letter-spacing: .06em; text-transform: uppercase;
+  transition: color .2s;
+}
+.nav-links a:hover { color: var(--amber); }
+.btn-cta {
+  background: var(--amber); color: #080C11;
+  font-family: var(--mono); font-size: .70rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: .45rem 1.1rem; border-radius: 3px;
+  text-decoration: none; transition: background .2s;
+}
+.btn-cta:hover { background: var(--amber2); }
+
+/* ── HERO ────────────────────────────────────────────────────────────────── */
+.hero {
+  padding: 6rem 0 4rem;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center;
+}
+.hero-eyebrow {
+  font-size: .62rem; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--amber); margin-bottom: 1rem;
+}
+.hero-h1 {
+  font-family: var(--display);
+  font-size: clamp(2.2rem, 4vw, 3.2rem);
+  font-weight: 800; line-height: 1.08;
+  color: var(--text); letter-spacing: -.03em;
+  margin-bottom: 1.2rem;
+}
+.hero-h1 span { color: var(--amber); }
+.hero-desc {
+  font-size: .85rem; color: var(--soft); line-height: 1.75;
+  margin-bottom: 2rem; max-width: 480px;
+}
+.hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+.btn-primary {
+  background: var(--amber); color: #080C11;
+  font-family: var(--mono); font-size: .72rem; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: .7rem 1.6rem; border-radius: 3px;
+  text-decoration: none; transition: background .2s, transform .15s;
+  display: inline-flex; align-items: center; gap: .5rem;
+}
+.btn-primary:hover { background: var(--amber2); transform: translateY(-1px); }
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--soft);
+  font-family: var(--mono); font-size: .72rem;
+  letter-spacing: .06em; text-transform: uppercase;
+  padding: .7rem 1.6rem; border-radius: 3px;
+  text-decoration: none; transition: border-color .2s, color .2s;
+  display: inline-flex; align-items: center; gap: .5rem;
+}
+.btn-secondary:hover { border-color: var(--amber); color: var(--amber); }
+
+/* ── Dashboard mockup ───────────────────────────────────────────────────── */
+.mockup {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 0 1px var(--border);
+  animation: float 6s ease-in-out infinite;
+}
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+.mockup-bar {
+  background: var(--bg3); border-bottom: 1px solid var(--border);
+  padding: .6rem 1rem; display: flex; align-items: center; gap: .5rem;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r { background: #EF4444; } .dot-y { background: #F59E0B; } .dot-g { background: #34D399; }
+.mockup-title {
+  font-size: .65rem; color: var(--muted); letter-spacing: .08em;
+  text-transform: uppercase; margin-left: auto; margin-right: auto;
+}
+.mockup-body { padding: 1.2rem; }
+.m-stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: 1rem; }
+.m-stat {
+  background: var(--bg1); border: 1px solid var(--border);
+  border-top: 2px solid var(--amber);
+  padding: .7rem; border-radius: 3px;
+}
+.m-stat-l { font-size: .55rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+.m-stat-v { font-size: 1.1rem; font-weight: 600; color: var(--amber); }
+.m-table { width: 100%; border-collapse: collapse; font-size: .65rem; }
+.m-table th {
+  background: var(--bg3); color: var(--amber);
+  padding: .3rem .5rem; text-align: left;
+  letter-spacing: .06em; font-size: .58rem; text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.m-table td { padding: .28rem .5rem; border-bottom: 1px solid rgba(30,45,61,.5); color: var(--soft); }
+.m-table tr:last-child td { border-bottom: none; }
+.badge-ok { background: rgba(52,211,153,.15); color: var(--green); padding: 1px 6px; border-radius: 2px; font-size: .55rem; }
+.badge-no { background: rgba(245,158,11,.12); color: var(--amber); padding: 1px 6px; border-radius: 2px; font-size: .55rem; }
+
+/* ── Metric strip ────────────────────────────────────────────────────────── */
+.metrics {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 2rem 0; margin: 1rem 0;
+}
+.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+.metric {
+  padding: 1.2rem 2rem;
+  border-right: 1px solid var(--border);
+}
+.metric:last-child { border-right: none; }
+.metric-val {
+  font-family: var(--display); font-size: 2.2rem; font-weight: 800;
+  color: var(--amber); line-height: 1; margin-bottom: .3rem;
+}
+.metric-lbl { font-size: .65rem; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.metric-sub { font-size: .72rem; color: var(--soft); margin-top: .25rem; }
+
+/* ── Method cards ─────────────────────────────────────────────────────────── */
+.section { padding: 4rem 0; }
+.section-header { margin-bottom: 2.5rem; }
+.section-title {
+  font-family: var(--display); font-size: 1.6rem; font-weight: 700;
+  color: var(--text); letter-spacing: -.02em; margin-top: .5rem;
+}
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); }
+.card {
+  background: var(--bg1); padding: 1.6rem;
+  transition: background .2s;
+}
+.card:hover { background: var(--bg2); }
+.card-num {
+  font-size: .62rem; color: var(--amber); letter-spacing: .1em;
+  margin-bottom: .8rem; opacity: .7;
+}
+.card-title {
+  font-family: var(--display); font-size: .95rem; font-weight: 700;
+  color: var(--text); margin-bottom: .5rem;
+}
+.card-desc { font-size: .78rem; color: var(--soft); line-height: 1.65; }
+.card-tag {
+  display: inline-block; margin-top: .8rem;
+  background: rgba(245,158,11,.1); color: var(--amber);
+  font-size: .60rem; letter-spacing: .08em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 2px;
+}
+
+/* ── Code formula block ─────────────────────────────────────────────────── */
+.formula-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
+.formula-card {
+  background: #080C11; padding: 1.6rem; font-size: .78rem;
+  line-height: 1.8; color: #7DD3FC;
+}
+.formula-card .comment { color: var(--muted); }
+.formula-card .keyword { color: var(--amber); font-weight: 600; }
+.formula-card .value   { color: var(--green); }
+
+/* ── References ─────────────────────────────────────────────────────────── */
+.refs { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+.ref-chip {
+  background: var(--bg2); border: 1px solid var(--border);
+  font-size: .65rem; color: var(--soft); padding: 4px 10px; border-radius: 3px;
+}
+
+/* ── Author strip ────────────────────────────────────────────────────────── */
+.author {
+  border-top: 1px solid var(--border); padding: 3rem 0;
+  display: grid; grid-template-columns: 1fr auto; gap: 2rem; align-items: center;
+}
+.author-name {
+  font-family: var(--display); font-size: 1.1rem; font-weight: 700;
+  color: var(--text); margin-bottom: .2rem;
+}
+.author-role { font-size: .75rem; color: var(--muted); }
+.author-links { display: flex; gap: .8rem; }
+.author-link {
+  font-size: .68rem; color: var(--soft); text-decoration: none;
+  border: 1px solid var(--border); padding: .4rem .9rem; border-radius: 3px;
+  transition: border-color .2s, color .2s;
+}
+.author-link:hover { border-color: var(--amber); color: var(--amber); }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+footer {
+  border-top: 1px solid var(--border); padding: 1.5rem 0;
+  font-size: .62rem; color: var(--muted);
+  display: flex; justify-content: space-between; align-items: center;
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp .7s ease both; }
+.delay-1 { animation-delay: .1s; }
+.delay-2 { animation-delay: .2s; }
+.delay-3 { animation-delay: .3s; }
+.delay-4 { animation-delay: .4s; }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 800px) {
+  .hero { grid-template-columns: 1fr; gap: 2rem; padding: 3rem 0; }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .metric { border-right: none; border-bottom: 1px solid var(--border); }
+  .cards { grid-template-columns: 1fr; }
+  .formula-grid { grid-template-columns: 1fr; }
+  .author { grid-template-columns: 1fr; }
+  .nav-links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="wrap nav-inner">
+    <div class="nav-logo">
+      <div class="nav-icon">⚙</div>
+      <span class="nav-name">ShiftIQ</span>
+    </div>
+    <div class="nav-links">
+      <a href="#model">Model</a>
+      <a href="#formulation">Formulation</a>
+      <a href="#stack">Stack</a>
+    </div>
+    <a href="https://shiftiq.streamlit.app" target="_blank" class="btn-cta">Launch App →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="wrap">
+  <div class="hero">
+    <div>
+      <p class="hero-eyebrow fade-up">Operations Research · Manufacturing IE · 2025</p>
+      <h1 class="hero-h1 fade-up delay-1">
+        Workforce scheduling<br>that <span>proves</span><br>it works.
+      </h1>
+      <p class="hero-desc fade-up delay-2">
+        ShiftIQ implements the <strong style="color:var(--text)">Dantzig (1954) set-covering MILP</strong>
+        to solve minimum-cost shift schedules across battery assembly stations —
+        with post-solve constraint validation, takt-time derived demand,
+        and ISO 22400-2 OEE tracking. Every number is cited. Nothing is invented.
+      </p>
+      <div class="hero-actions fade-up delay-3">
+        <a href="https://shiftiq.streamlit.app" target="_blank" class="btn-primary">
+          ↗ Open Live App
+        </a>
+        <a href="https://github.com/rutwiksatish/shiftiq" target="_blank" class="btn-secondary">
+          ⎇ View on GitHub
+        </a>
+      </div>
+    </div>
+
+    <!-- Dashboard mockup -->
+    <div class="mockup fade-up delay-4">
+      <div class="mockup-bar">
+        <div class="dot dot-r"></div>
+        <div class="dot dot-y"></div>
+        <div class="dot dot-g"></div>
+        <span class="mockup-title">ShiftIQ · Optimal Schedule</span>
+      </div>
+      <div class="mockup-body">
+        <div class="m-stat-row">
+          <div class="m-stat">
+            <div class="m-stat-l">Takt Time</div>
+            <div class="m-stat-v">0.5625</div>
+          </div>
+          <div class="m-stat">
+            <div class="m-stat-l">Headcount</div>
+            <div class="m-stat-v">186</div>
+          </div>
+          <div class="m-stat">
+            <div class="m-stat-l">Weekly Cost</div>
+            <div class="m-stat-v">$42.5K</div>
+          </div>
+        </div>
+        <table class="m-table">
+          <thead>
+            <tr><th>Station</th><th>Shift</th><th>Workers</th><th>Valid</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Cell Stacking</td><td>Day</td><td>15</td><td><span class="badge-ok">✓ YES</span></td></tr>
+            <tr><td>Laser Welding</td><td>Day</td><td>14</td><td><span class="badge-ok">✓ YES</span></td></tr>
+            <tr><td>Module Assembly</td><td>Evening</td><td>13</td><td><span class="badge-ok">✓ YES</span></td></tr>
+            <tr><td>QC & Testing</td><td>Night</td><td>6</td><td><span class="badge-ok">✓ YES</span></td></tr>
+            <tr><td>Pack Integration</td><td>Night</td><td>7</td><td><span class="badge-ok">✓ YES</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- METRICS -->
+<div class="metrics">
+  <div class="wrap">
+    <div class="metrics-grid">
+      <div class="metric">
+        <div class="metric-val">18</div>
+        <div class="metric-lbl">MILP Sub-Problems</div>
+        <div class="metric-sub">6 stations × 3 shifts, all validated</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val">7</div>
+        <div class="metric-lbl">Days Validated</div>
+        <div class="metric-sub">all(A @ x ≥ demand) checked explicitly</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val">5</div>
+        <div class="metric-lbl">Interactive Charts</div>
+        <div class="metric-sub">Heatmap, ramp curve, mix sensitivity</div>
+      </div>
+      <div class="metric">
+        <div class="metric-val">8</div>
+        <div class="metric-lbl">Cited References</div>
+        <div class="metric-sub">Dantzig, ISO 22400-2, SHRM, EJOR…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODEL SECTION -->
+<section class="section wrap" id="model">
+  <div class="section-header">
+    <p class="label">Methodology</p>
+    <h2 class="section-title">Built on documented OR theory.<br>Not heuristics. Not guesses.</h2>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-num">01</div>
+      <div class="card-title">Takt-Time Demand Derivation</div>
+      <div class="card-desc">
+        Operator demand is computed from first principles:
+        <code style="color:var(--amber)">Ops = ⌈Work_Content / Takt⌉</code>
+        where Takt = Net Available Time ÷ Daily Demand.
+        Evening and night ratios (0.75, 0.55) follow Ernst et al. (2004 EJOR).
+      </div>
+      <span class="card-tag">Womack & Jones 1996</span>
+    </div>
+    <div class="card">
+      <div class="card-num">02</div>
+      <div class="card-title">Dantzig Set-Covering MILP</div>
+      <div class="card-desc">
+        One sub-problem per station-shift: minimize total workers assigned to
+        5-on-2-off patterns while covering demand every day of the week.
+        Totally unimodular matrix guarantees LP relaxation is integer-optimal.
+      </div>
+      <span class="card-tag">Dantzig OR 2(3) 1954</span>
+    </div>
+    <div class="card">
+      <div class="card-num">03</div>
+      <div class="card-title">Post-Solve Validation</div>
+      <div class="card-desc">
+        After every solve, <code style="color:var(--amber)">all(A @ x ≥ demand_vec)</code>
+        is checked explicitly for all 7 days. The UI shows a YES/NO column —
+        not an assumed pass. Solver: HiGHS via scipy.optimize.milp.
+      </div>
+      <span class="card-tag">Veinott & Wagner 1962</span>
+    </div>
+    <div class="card">
+      <div class="card-num">04</div>
+      <div class="card-title">Loaded Labor Cost Model</div>
+      <div class="card-desc">
+        Loaded cost = base wage × hours × 1.30 burden rate (SHRM 2023
+        US manufacturing benchmark). Contractor bill rate includes 1.15 agency markup.
+        Mix sensitivity table shows exact weekly cost per FT/PT/CT ratio.
+      </div>
+      <span class="card-tag">SHRM Benefits Survey 2023</span>
+    </div>
+    <div class="card">
+      <div class="card-num">05</div>
+      <div class="card-title">ISO 22400-2 OEE</div>
+      <div class="card-desc">
+        OEE = Availability × Performance × Quality, computed from user-supplied
+        inputs per the international standard. Not predicted from headcount —
+        OEE depends on equipment state, not staffing alone.
+      </div>
+      <span class="card-tag">ISO 22400-2:2014</span>
+    </div>
+    <div class="card">
+      <div class="card-num">06</div>
+      <div class="card-title">AI Schedule Debrief</div>
+      <div class="card-desc">
+        After each run, Groq (Llama 3.3 70B) generates a structured debrief
+        with coverage flags, cost concentration, night-shift proportionality,
+        and one action item — using only MILP output numbers, no generic advice.
+      </div>
+      <span class="card-tag">Groq · Llama 3.3 70B</span>
+    </div>
+  </div>
+</section>
+
+<!-- FORMULATION -->
+<section class="section wrap" id="formulation">
+  <div class="section-header">
+    <p class="label">Model Formulation</p>
+    <h2 class="section-title">The math, not the marketing.</h2>
+  </div>
+  <div class="formula-grid">
+    <div class="formula-card">
+<span class="comment">// Dantzig (1954) Set-Covering MILP</span>
+<span class="comment">// OR 2(3):339–341</span>
+
+<span class="keyword">variables</span>
+  x[i] ∈ ℤ⁺  <span class="comment">// i = Mon..Sun</span>
+  x[i] = workers on pattern i
+
+<span class="keyword">coverage matrix</span>
+  A[j,i] = 1 if pattern i
+           covers day j
+  5-on-2-off: 7 patterns
+
+<span class="keyword">objective</span>
+  <span class="value">min  Σᵢ x[i]</span>
+
+<span class="keyword">demand coverage</span>
+  A @ x ≥ d[j]  ∀ day j
+
+<span class="keyword">complexity</span>
+  18 sub-problems
+  7 vars × 7 constraints each
+  TU matrix → LP opt integral
+    </div>
+    <div class="formula-card">
+<span class="comment">// Demand Derivation</span>
+<span class="comment">// Womack & Jones (1996)</span>
+
+<span class="keyword">takt time</span>
+  T = Net_Available / Demand
+
+<span class="keyword">operators per station</span>
+  Ops_day = <span class="value">⌈ WC / T ⌉</span>
+  Ops_eve = <span class="value">⌈ Ops_day × 0.75 ⌉</span>
+  Ops_ngt = <span class="value">⌈ Ops_day × 0.55 ⌉</span>
+  Weekend = <span class="value">⌈ Weekday × 0.85 ⌉</span>
+
+<span class="comment">// Loaded Cost</span>
+<span class="comment">// SHRM 2023</span>
+  FT = wage × hrs × <span class="value">1.30</span>
+  CT = wage × hrs × <span class="value">1.30 × 1.15</span>
+
+<span class="comment">// OEE — ISO 22400-2:2014</span>
+  OEE = <span class="value">A × P × Q</span>
+    </div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section class="section wrap" id="stack">
+  <div class="section-header">
+    <p class="label">Technical Stack</p>
+    <h2 class="section-title">Python · Streamlit · SciPy</h2>
+  </div>
+  <div class="refs">
+    <span class="ref-chip">Python 3.11+</span>
+    <span class="ref-chip">Streamlit</span>
+    <span class="ref-chip">scipy.optimize.milp (HiGHS)</span>
+    <span class="ref-chip">NumPy · Pandas</span>
+    <span class="ref-chip">Altair</span>
+    <span class="ref-chip">Groq API — Llama 3.3 70B</span>
+    <span class="ref-chip">IBM Plex Mono · Syne</span>
+    <span class="ref-chip">GitHub Pages (this site)</span>
+  </div>
+  <div class="refs" style="margin-top:.5rem;">
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">Dantzig (1954) OR 2(3):339–341</span>
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">Van den Bergh et al. (2013) EJOR 226(3)</span>
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">Womack & Jones (1996) Lean Thinking</span>
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">Ernst et al. (2004) EJOR 153(1)</span>
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">ISO 22400-2:2014</span>
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">SHRM Benefits Survey 2023</span>
+    <span class="ref-chip" style="border-color:var(--amber);color:var(--amber)">Veinott & Wagner (1962)</span>
+  </div>
+</section>
+
+<!-- AUTHOR -->
+<div class="wrap">
+  <div class="author">
+    <div>
+      <div class="author-name">Rutwik Satish</div>
+      <div class="author-role">MS Engineering Management · Northeastern University · May 2026 · STEM OPT 36 months</div>
+    </div>
+    <div class="author-links">
+      <a href="https://linkedin.com/in/rutwiksatish" target="_blank" class="author-link">LinkedIn</a>
+      <a href="https://github.com/rutwiksatish" target="_blank" class="author-link">GitHub</a>
+      <a href="mailto:satish.rutwik@gmail.com" class="author-link">Email</a>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap" style="display:flex;justify-content:space-between;width:100%;">
+    <span>ShiftIQ · Dantzig (1954) MILP · ISO 22400-2 OEE · Lean Takt-Time</span>
+    <span>© 2025 Rutwik Satish</span>
+  </div>
+</footer>
+
+</body>
+</html>
