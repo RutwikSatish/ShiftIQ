@@ -382,9 +382,9 @@ h1, h2, h3 { font-family: 'DM Sans', sans-serif; font-weight: 600; }
 .fml b { color: var(--amber); }
 
 /* ── Hide streamlit chrome ── */
-#MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 .stDeployButton { display: none; }
+#MainMenu { visibility: visible !important; }
 div[data-testid="stToolbar"] { visibility: visible !important; display: flex !important; }
 header[data-testid="stHeader"] { background: transparent !important; }
 </style>
