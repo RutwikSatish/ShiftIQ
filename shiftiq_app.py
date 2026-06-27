@@ -1,30 +1,33 @@
 """
-ShiftIQ v2 — Workforce Shift Scheduling Optimizer
-===================================================
+TaktIQ — Production Shift Scheduling Optimizer
+================================================
 Dantzig (1954) Set-Covering MILP · ISO 22400-2 OEE · Lean Takt-Time
 
-CHANGES FROM v1 (all validated with citations):
+WHAT IT DOES:
+  TaktIQ answers the question every manufacturing planner faces every week:
+  "How many workers do I need, on which shifts, on which days, to hit my
+  production target — and what happens to the schedule when something breaks?"
 
-[C1] Default calibrated to Tesla Lathrop Megafactory confirmed output
-     Source: Tesla Megafactory now produces 200 Megapacks/week (40 GWh/yr)
-     Ref: basenor.com, May 2026 — confirmed production milestone
+  It takes your daily unit target, your station work content, shift structure,
+  and OEE, then solves a proven mathematical optimization (Dantzig 1954 MILP)
+  to find the minimum headcount schedule that covers demand every day of the week.
+  All constraints are validated post-solve. Loaded labor cost is calculated
+  across Full-Time, Part-Time, and Contractor mixes. When a disruption hits,
+  the Disruption Impact tab calculates units at risk and ranks recovery options.
 
-[C2] CSV upload for custom station data
-     Source: Market gap — customization is the #1 demand in production scheduling
-     software (Production Scheduling Software Market Report 2026, CAGR 9.5%)
-     Allows any manufacturing line to use ShiftIQ, not just battery assembly
-
-[C3] OEE feeds into demand calculation (not just display)
-     Formula: adjusted_demand = target / OEE (Nakajima 1988, ISO 22400-2:2014)
-     Fix: v1 displayed OEE but did not use it — logical gap now closed
-
-[C4] Disruption Impact Modeler tab
-     Source: Tesla Production Planner JD Req.ID 270895 —
-     "respond to unanticipated changes, assess impacts, recommend options"
-     Shoplogix (2025) — "small issues snowball into major delays"
+HOW IT WORKS:
+  1. OEE-adjusted demand: target / OEE = how many units to START
+     (Nakajima 1988 TPM · ISO 22400-2:2014)
+  2. Takt time: net available minutes / OEE-adjusted demand
+     (Womack & Jones 1996 Lean Thinking)
+  3. Operators per station: ceil(work_content / takt)
+  4. Dantzig (1954) 5-on-2-off MILP: minimum workers per start-day pattern
+     to cover demand every day — solved independently per station per shift
+  5. Post-solve validation: A@x >= demand_vec confirmed for all 18 sub-problems
+  6. Loaded cost: base × hours × 1.30 burden (SHRM 2023) × 1.15 agency if contractor
 
 Run:  pip install streamlit numpy scipy pandas altair
-      streamlit run shiftiq_v2.py
+      streamlit run taktiq.py
 """
 
 import math, json, http.client, ssl, io
@@ -39,12 +42,9 @@ from datetime import datetime
 # ─────────────────────────────────────────────────────────────────────────────
 DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
 
-# [C1] Default calibrated to Lathrop confirmed output
-# 200 Megapacks/week ÷ 5 production days = 40 completed units/day
-# Planning-level fabricated component target = 160/day (4 major assemblies per unit)
-# Ref: Tesla Megafactory Lathrop — 200 Megapacks/week confirmed (May 2026)
-LATHROP_DEFAULT_DAILY  = 160
-LATHROP_WEEKLY_RATE    = 200  # Megapacks/week — confirmed production milestone
+# Default daily target — calibrated to a high-volume battery assembly line
+# (6 stations, 3 shifts, 8-hr day, 85% OEE · Dantzig 1954 MILP)
+DEFAULT_DAILY_TARGET = 160
 
 # Default station data for battery module assembly
 DEFAULT_STATIONS = {
@@ -192,11 +192,10 @@ def build_demand(daily_demand, shift_min, break_min, ramp_pct,
     return dm, tk, oee_adj, ramp_adj
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [C4] DISRUPTION IMPACT MODEL
-# Source: Tesla Production Planner JD Req.ID 270895 —
-#   "Respond to unanticipated changes — provide impact assessment and options"
-# Shoplogix (2025) Manufacturing Scheduling Challenges —
+# DISRUPTION IMPACT MODEL
+# Source: Shoplogix (2025) Manufacturing Scheduling Challenges —
 #   "small issues quickly snowball into major delays"
+# Ernst et al. (2004) EJOR 153(1) — workforce scheduling under disruptions
 # ─────────────────────────────────────────────────────────────────────────────
 def disruption_impact(station_name: str, station_demand: int,
                        capacity_loss_pct: float, hours_affected: float,
@@ -217,10 +216,10 @@ def disruption_impact(station_name: str, station_demand: int,
     Returns: impact dict with units at risk and ranked recovery options.
 
     Citations:
-      - Tesla Production Planner JD Req.ID 270895 — impact assessment mandate
       - Ernst et al. (2004) EJOR 153(1) — overtime cost multiplier (1.5x)
       - SHRM (2025) Flexible Scheduling Models — cross-training as buffer
       - Womack & Jones (1996) — takt-time based capacity calculation
+      - Shoplogix (2025) — disruption impact on production schedules
     """
     fraction_lost = (hours_affected / shift_hrs) * (capacity_loss_pct / 100)
     # Effective operator-hours lost
@@ -273,14 +272,14 @@ def disruption_impact(station_name: str, station_demand: int,
     })
 
     # Option D: Accept shortfall, escalate to S&OP
-    # Ref: Tesla JD — "communicate plan revisions to manufacturing and business stakeholders"
+    # Ref: APICS CPIM Body of Knowledge — S&OP escalation as standard response
     options.append({
         "rank": 4,
         "option": "D — Report to S&OP and revise schedule",
         "detail": f"Accept {units_at_risk}-unit shortfall, adjust downstream delivery commitments",
         "cost_impact": "Downstream schedule revision required",
         "feasibility": "Always available",
-        "citation": "Tesla Production Planner JD Req.ID 270895"
+        "citation": "Shoplogix (2025) Manufacturing Scheduling Challenges"
     })
 
     return {
@@ -371,7 +370,7 @@ Single most actionable recommendation."""
 # PAGE CONFIG + THEME (unchanged from v1)
 # ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ShiftIQ v2",
+    page_title="TaktIQ",
     page_icon="⚙",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -464,8 +463,8 @@ footer { visibility:hidden; }
 with st.sidebar:
     st.markdown("""
 <div style="padding:12px 0 8px">
-  <div style="font-family:'IBM Plex Mono',monospace;font-size:1.1rem;font-weight:600;color:#F59E0B;">⚙ ShiftIQ</div>
-  <div style="font-size:.68rem;color:#475569;font-family:'IBM Plex Mono',monospace;margin-top:2px;">WORKFORCE SCHEDULING ENGINE v2</div>
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:1.1rem;font-weight:600;color:#F59E0B;">⚙ TaktIQ</div>
+  <div style="font-size:.68rem;color:#475569;font-family:'IBM Plex Mono',monospace;margin-top:2px;">PRODUCTION SHIFT SCHEDULING OPTIMIZER</div>
 </div>
 <div style="border-bottom:1px solid #1E2D3D;margin-bottom:16px;"></div>
 """, unsafe_allow_html=True)
@@ -480,7 +479,7 @@ with st.sidebar:
     uploaded_stations = None
     if data_src == "Upload CSV":
         st.download_button("Download CSV Template", get_csv_template(),
-                           "shiftiq_stations_template.csv", "text/csv",
+                           "taktiq_stations_template.csv", "text/csv",
                            use_container_width=True)
         uf = st.file_uploader("Upload station CSV", type=["csv"],
                                label_visibility="collapsed")
@@ -495,11 +494,10 @@ with st.sidebar:
     st.markdown('<div style="border-bottom:1px solid #1E2D3D;margin:12px 0;"></div>', unsafe_allow_html=True)
     st.markdown('<div style="font-family:\'IBM Plex Mono\',monospace;font-size:.65rem;color:#F59E0B;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;">LINE PARAMETERS</div>', unsafe_allow_html=True)
 
-    # [C1] Default calibrated to Lathrop
     daily_dem = st.number_input(
         "Daily unit target",
-        100, 2000, LATHROP_DEFAULT_DAILY, 10,
-        help=f"Default={LATHROP_DEFAULT_DAILY} — calibrated to Lathrop {LATHROP_WEEKLY_RATE} Megapacks/week (confirmed May 2026)"
+        100, 2000, DEFAULT_DAILY_TARGET, 10,
+        help="Default=160 — calibrated to a high-volume battery assembly line (6 stations, 3 shifts, 85% OEE)"
     )
     ramp_pct  = st.slider("Production ramp (%)", 0, 80, 0, 5)
     shift_dur = st.selectbox("Shift length (hrs)", [8, 10, 12], 0)
@@ -538,10 +536,9 @@ with c1:
 with c2:
     st.markdown(f"""
 <div style="padding-top:2px">
-  <div style="font-size:1.75rem;font-weight:600;color:#F1F5F9;">ShiftIQ <span style="font-size:1rem;color:#475569;">v2</span></div>
+  <div style="font-size:1.75rem;font-weight:600;color:#F1F5F9;">TaktIQ</div>
   <div style="font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:#64748B;letter-spacing:.08em;text-transform:uppercase;margin-top:2px;">
-    Workforce Shift Scheduling Optimizer · Battery Assembly · Dantzig (1954) MILP · ISO 22400-2
-    &nbsp;·&nbsp; <span style="color:#34D399">Default calibrated to Tesla Lathrop {LATHROP_WEEKLY_RATE} Megapacks/week</span>
+    Production Shift Scheduling Optimizer · Dantzig (1954) MILP · ISO 22400-2 OEE · Lean Takt-Time
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -612,7 +609,7 @@ if run or "res" in st.session_state:
         f'<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);'
         f'border-left:3px solid #F59E0B;padding:8px 14px;border-radius:4px;'
         f'font-family:\'IBM Plex Mono\',monospace;font-size:.76rem;color:#CBD5E1;margin-bottom:8px;">'
-        f'<span style="color:#F59E0B;font-weight:600">[C3] OEE-adjusted demand:</span> '
+        f'<span style="color:#F59E0B;font-weight:600">OEE-adjusted demand:</span> '
         f'Target {ramp_adj} units → must start <strong style="color:#F59E0B">{oee_adj} units</strong> '
         f'(+{oee_delta} starts to absorb {100-int(oev*100)}% OEE loss) · '
         f'ISO 22400-2:2014 · Nakajima (1988)</div>',
@@ -633,7 +630,7 @@ if run or "res" in st.session_state:
     st.markdown(kpi_html, unsafe_allow_html=True)
 
     # ── OEE row ────────────────────────────────────────────────────────────
-    st.markdown('<div class="shdr">OEE — ISO 22400-2:2014 <span class="new-badge">NOW DRIVES DEMAND</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="shdr">OEE — ISO 22400-2:2014 · Drives production start target</div>', unsafe_allow_html=True)
     oee_html = '<div class="oee-grid">'
     for lbl, v in [("Availability", p["avail"]), ("Performance", p["perf"]),
                    ("Quality", p["qual_"]), ("OEE = A×P×Q", oev)]:
@@ -768,9 +765,9 @@ if run or "res" in st.session_state:
 <div style="font-size:.80rem;color:#94A3B8;margin-bottom:16px;max-width:720px">
 When an unplanned event hits a station — machine failure, quality hold, absent operators —
 this tab calculates the production units at risk and ranks recovery options by feasibility.
-Directly maps to the Tesla Production Planner role requirement:
-<em>"respond to unanticipated changes — assess impacts, recommend options, align downstream"</em>
-(Req.ID 270895).
+When an unplanned event hits — machine failure, absent operators, quality hold — this tab
+calculates the units at risk and ranks recovery options by feasibility and cost impact.
+Ref: Shoplogix (2025) Manufacturing Scheduling Challenges · Ernst et al. (2004) EJOR.
 </div>
 """, unsafe_allow_html=True)
 
@@ -823,7 +820,7 @@ Directly maps to the Tesla Production Planner role requirement:
                     f'</div></div>',
                     unsafe_allow_html=True)
             st.markdown(
-                '<span class="ref">Tesla Production Planner JD Req.ID 270895</span>'
+                '<span class="ref">APICS CPIM — S&OP escalation</span>'
                 '<span class="ref">Ernst et al. (2004) EJOR 153(1)</span>'
                 '<span class="ref">SHRM (2025) Flexible Scheduling</span>'
                 '<span class="ref">Womack & Jones (1996)</span>',
@@ -860,9 +857,9 @@ Directly maps to the Tesla Production Planner role requirement:
 
     with ec1:
         export = {
-            "app": "ShiftIQ v2 — Workforce Shift Scheduling Optimizer",
+            "app": "TaktIQ — Production Shift Scheduling Optimizer",
             "version": "2.0",
-            "changes": ["C1: Lathrop-calibrated default", "C2: CSV upload",
+            "changes": ["OEE-adjusted demand", "CSV station upload",
                         "C3: OEE drives demand", "C4: Disruption impact modeler"],
             "generated": datetime.now().isoformat(),
             "parameters": p, "takt": round(tk_,4),
@@ -873,7 +870,7 @@ Directly maps to the Tesla Production Planner role requirement:
             "all_validated": all_ok,
         }
         st.download_button("↓ EXPORT JSON", data=json.dumps(export,indent=2),
-                           file_name=f"shiftiq_v2_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+                           file_name=f"taktiq_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
                            mime="application/json", use_container_width=True)
 
     with ec2:
@@ -912,25 +909,30 @@ Directly maps to the Tesla Production Planner role requirement:
 # PRE-RUN LANDING
 # ─────────────────────────────────────────────────────────────────────────────
 else:
-    st.markdown('<div class="shdr">WHAT IS NEW IN v2</div>', unsafe_allow_html=True)
+    st.markdown('<div class="shdr">HOW TAKTIQ WORKS</div>', unsafe_allow_html=True)
     lc1, lc2, lc3, lc4 = st.columns(4)
     for col, title, body in [
-        (lc1, "[C1] Lathrop Default",
-         f"Default target calibrated to Tesla Lathrop confirmed output:"
-         f" {LATHROP_WEEKLY_RATE} Megapacks/week = {LATHROP_DEFAULT_DAILY} daily component sets."
-         f" Ref: basenor.com May 2026."),
-        (lc2, "[C2] CSV Station Upload",
-         "Upload your own station data (station, work_content, description)."
-         " Use ShiftIQ for any manufacturing line, not just battery assembly."
-         " Template available in sidebar."),
-        (lc3, "[C3] OEE Drives Demand",
-         "v1 gap fixed: OEE now adjusts production start target."
-         " adjusted = ceil(target / OEE). If OEE=0.85, you must start"
-         " more units than target. ISO 22400-2:2014 · Nakajima (1988)."),
-        (lc4, "[C4] Disruption Impact",
-         "New tab: when a machine fails or station loses capacity,"
-         " calculates units at risk and ranks 4 recovery options by feasibility."
-         " Tesla Production Planner JD Req.ID 270895."),
+        (lc1, "What it solves",
+         "Most plants set shift schedules in spreadsheets with no guarantee the schedule"
+         " covers demand on every day of the week. TaktIQ solves a mathematical optimization"
+         " (Dantzig 1954 MILP) to find the minimum headcount that meets demand every day,"
+         " validates every constraint post-solve, and reports loaded labor cost."),
+        (lc2, "How the math works",
+         "1. OEE adjusts how many units you must START (ISO 22400-2 · Nakajima 1988)."
+         " 2. Takt time = net available minutes / OEE-adjusted demand (Womack & Jones 1996)."
+         " 3. Operators per station = ceil(work content / takt)."
+         " 4. Dantzig MILP finds minimum workers across 5-on-2-off patterns."
+         " 5. All 18 sub-problems validated post-solve."),
+        (lc3, "Your station data",
+         "Use the default 6-station battery assembly line or upload your own CSV"
+         " with station names and work content (man-minutes per unit)."
+         " TaktIQ works for any manufacturing line — automotive, electronics, consumer goods."
+         " Download the template from the sidebar to get started."),
+        (lc4, "When disruptions hit",
+         "The Disruption Impact tab calculates how many units are at risk when a station"
+         " loses capacity — machine down, absent operators, quality hold."
+         " Ranks 4 recovery options by feasibility: overtime, cross-station reallocation,"
+         " buffer draw-down, or S&OP escalation. Ref: Ernst et al. (2004) EJOR."),
     ]:
         with col:
             col.markdown(f'<div class="fml"><b>// {title}</b><br><br>{body}</div>',
@@ -943,7 +945,7 @@ st.markdown(f"""
 <div style="border-top:1px solid #1E2D3D;margin-top:2rem;padding-top:1rem;
      font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:#334155;
      display:flex;justify-content:space-between;">
-  <span>ShiftIQ v2 · Dantzig (1954) MILP · HiGHS · ISO 22400-2 · OEE-adjusted demand</span>
+  <span>TaktIQ · Production Shift Scheduling Optimizer · Dantzig (1954) MILP · ISO 22400-2 OEE · Lean Takt-Time</span>
   <span>Rutwik Satish · MS Engineering Management · Northeastern University · 2026</span>
 </div>
 """, unsafe_allow_html=True)
